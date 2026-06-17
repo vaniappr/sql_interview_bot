@@ -2,6 +2,8 @@
 either against a built-in banking + retail database, or against your own
 Kaggle dataset (CSV / zip of CSVs)."""
 
+import sqlite3
+
 import streamlit as st
 
 from dataset_loader import CUSTOM_DB_PATH, load_dataset
@@ -10,12 +12,50 @@ from grader import DEFAULT_DB_PATH, grade
 from llm import interviewer_feedback
 from questions import QUESTIONS as FINCOMMERCE_QUESTIONS
 
+FINCOMMERCE = "fincommerce"
+CUSTOM = "custom"
+
+
+def list_tables(db_path):
+    conn = sqlite3.connect(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+        ).fetchall()
+        return [r[0] for r in rows]
+    finally:
+        conn.close()
+
+
+def fetch_table(db_path, table_name, limit=100):
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.execute(f"SELECT * FROM {table_name} LIMIT ?", (limit,))
+        columns = [d[0] for d in cur.description]
+        rows = cur.fetchall()
+        return columns, rows
+    finally:
+        conn.close()
+
+
+def go_home():
+    st.session_state.page = "home"
+
+
+def start_interview(db_key):
+    st.session_state.active_db = db_key
+    st.session_state.current_q = (
+        FINCOMMERCE_QUESTIONS[0]["id"] if db_key == FINCOMMERCE else st.session_state.custom_questions[0]["id"]
+    )
+    st.session_state.score = {"correct": 0, "total": 0}
+    st.session_state.page = "interview"
+
+
 if not DEFAULT_DB_PATH.exists():
     from db.build_db import build
     build()
 
-st.set_page_config(page_title="SQL Interview Bot", page_icon="🗄️", layout="wide")
-st.title("🗄️ SQL Interview Bot")
+st.set_page_config(page_title="SQL Interview Bot", layout="wide")
 
 if "score" not in st.session_state:
     st.session_state.score = {"correct": 0, "total": 0}
@@ -26,45 +66,99 @@ if "custom_questions" not in st.session_state:
 if "custom_schema" not in st.session_state:
     st.session_state.custom_schema = None
 if "current_q" not in st.session_state:
-    st.session_state.current_q = FINCOMMERCE_QUESTIONS[0]["id"]
-if "mode" not in st.session_state:
-    st.session_state.mode = "FinCommerce (built-in)"
+    st.session_state.current_q = None
+if "active_db" not in st.session_state:
+    st.session_state.active_db = None
+if "page" not in st.session_state:
+    st.session_state.page = "home"
+
+
+# ---------------------------------------------------------------- Home page
+if st.session_state.page == "home":
+    st.title("SQL Interview Bot")
+    st.write("Choose a database to start your interview:")
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        with st.container(border=True):
+            st.subheader("FinCommerce (built-in)")
+            st.caption(
+                "A fictional bank + retail business: customers, accounts, "
+                "transactions, loans, cards, products, orders."
+            )
+            st.markdown(f"**{len(FINCOMMERCE_QUESTIONS)} questions** ready to go.")
+            if st.button("Start interview ▶", key="start_fincommerce"):
+                start_interview(FINCOMMERCE)
+                st.rerun()
+
+    with col2:
+        with st.container(border=True):
+            st.subheader("Your dataset")
+            if st.session_state.custom_questions:
+                st.caption("Loaded from your uploaded CSV/zip.")
+                for t in st.session_state.custom_schema:
+                    st.markdown(f"- **{t.name}** ({t.row_count} rows)")
+                st.markdown(f"**{len(st.session_state.custom_questions)} questions** ready to go.")
+                if st.button("Start interview ▶", key="start_custom"):
+                    start_interview(CUSTOM)
+                    st.rerun()
+                st.divider()
+
+            with st.expander("Upload a new dataset (Kaggle CSV/zip)", expanded=not st.session_state.custom_questions):
+                uploaded = st.file_uploader(
+                    "Upload CSV file(s) or a .zip of CSVs", type=["csv", "zip"], accept_multiple_files=True
+                )
+                st.caption("How many questions of each difficulty?")
+                diff_cols = st.columns(3)
+                with diff_cols[0]:
+                    n_easy = st.number_input("Easy", min_value=0, max_value=10, value=3, key="n_easy")
+                with diff_cols[1]:
+                    n_medium = st.number_input("Medium", min_value=0, max_value=10, value=3, key="n_medium")
+                with diff_cols[2]:
+                    n_hard = st.number_input("Hard", min_value=0, max_value=10, value=2, key="n_hard")
+                counts = {"Easy": n_easy, "Medium": n_medium, "Hard": n_hard}
+
+                if st.button("Load dataset & generate questions", disabled=not uploaded or not sum(counts.values())):
+                    with st.spinner("Loading dataset into SQLite..."):
+                        summaries = load_dataset(uploaded)
+                        st.session_state.custom_schema = summaries
+                    with st.spinner("Generating interview questions for your schema..."):
+                        qs = generate_questions(summaries, counts=counts)
+                    if not qs:
+                        st.error("Couldn't generate any valid questions from this dataset.")
+                    else:
+                        st.session_state.custom_questions = qs
+                        st.success(f"Loaded {len(summaries)} table(s), generated {len(qs)} question(s).")
+                        st.rerun()
+
+    st.stop()
+
+
+# ----------------------------------------------------------- Interview page
+if st.session_state.active_db == CUSTOM:
+    active_questions = st.session_state.custom_questions
+    db_path = CUSTOM_DB_PATH
+    db_label = "your uploaded dataset"
+else:
+    active_questions = FINCOMMERCE_QUESTIONS
+    db_path = DEFAULT_DB_PATH
+    db_label = "FinCommerce"
+
+if not active_questions:
+    go_home()
+    st.rerun()
+
+st.title("SQL Interview Bot")
+st.button("Home", on_click=go_home)
 
 with st.sidebar:
-    mode = st.radio(
-        "Dataset",
-        ["FinCommerce (built-in)", "Upload your own (Kaggle CSV/zip)"],
-        key="mode",
-    )
-
-    if mode == "Upload your own (Kaggle CSV/zip)":
-        uploaded = st.file_uploader(
-            "Upload CSV file(s) or a .zip of CSVs", type=["csv", "zip"], accept_multiple_files=True
-        )
-        n_questions = st.slider("Number of questions to generate", 3, 12, 8)
-        if st.button("Load dataset & generate questions", disabled=not uploaded):
-            with st.spinner("Loading dataset into SQLite..."):
-                summaries = load_dataset(uploaded)
-                st.session_state.custom_schema = summaries
-            with st.spinner("Generating interview questions for your schema..."):
-                qs = generate_questions(summaries, n=n_questions)
-            if not qs:
-                st.error("Couldn't generate any valid questions from this dataset.")
-            else:
-                st.session_state.custom_questions = qs
-                st.session_state.current_q = qs[0]["id"]
-                st.session_state.score = {"correct": 0, "total": 0}
-                st.success(f"Loaded {len(summaries)} table(s), generated {len(qs)} question(s).")
-
-        if st.session_state.custom_schema:
-            st.divider()
-            st.subheader("Schema")
-            for t in st.session_state.custom_schema:
-                cols = ", ".join(c for c, _ in t.columns)
-                st.markdown(f"- **{t.name}** ({t.row_count} rows): {cols}")
+    st.subheader(f"Database: {db_label}")
+    if st.session_state.active_db == CUSTOM:
+        for t in st.session_state.custom_schema:
+            cols = ", ".join(c for c, _ in t.columns)
+            st.markdown(f"- **{t.name}** ({t.row_count} rows): {cols}")
     else:
-        st.divider()
-        st.subheader("Schema")
         st.markdown(
             "- **branches** (branch_id, branch_name, city, region)\n"
             "- **customers** (customer_id, name, segment, branch_id)\n"
@@ -79,25 +173,11 @@ with st.sidebar:
 
     st.divider()
     st.metric("Score", f"{st.session_state.score['correct']} / {st.session_state.score['total']}")
-
-# Resolve active question list + db path for the selected mode
-if mode == "Upload your own (Kaggle CSV/zip)":
-    active_questions = st.session_state.custom_questions
-    db_path = CUSTOM_DB_PATH
-else:
-    active_questions = FINCOMMERCE_QUESTIONS
-    db_path = DEFAULT_DB_PATH
-
-if not active_questions:
-    st.info("Upload a dataset and click **Load dataset & generate questions** in the sidebar to begin.")
-    st.stop()
-
-with st.sidebar:
     st.divider()
     st.subheader("Jump to question")
     for q in active_questions:
         label = f"#{q['id']} [{q['difficulty']}] {q['topic']}"
-        if st.button(label, key=f"jump_{mode}_{q['id']}"):
+        if st.button(label, key=f"jump_{st.session_state.active_db}_{q['id']}"):
             st.session_state.current_q = q["id"]
 
 if st.session_state.current_q not in [q["id"] for q in active_questions]:
@@ -105,15 +185,18 @@ if st.session_state.current_q not in [q["id"] for q in active_questions]:
 
 question = next(q for q in active_questions if q["id"] == st.session_state.current_q)
 
-st.caption(
-    "Practicing against the FinCommerce sample database."
-    if mode == "FinCommerce (built-in)"
-    else "Practicing against your uploaded dataset."
-)
+with st.expander("Browse table data", expanded=False):
+    tables = list_tables(db_path)
+    chosen_table = st.selectbox("Table", tables, key=f"browse_table_{st.session_state.active_db}")
+    if chosen_table:
+        columns, rows = fetch_table(db_path, chosen_table)
+        st.caption(f"Showing up to 100 rows of `{chosen_table}`")
+        st.dataframe([dict(zip(columns, row)) for row in rows], width="stretch")
+
 st.subheader(f"Question {question['id']} — {question['difficulty']} · {question['topic']}")
 st.write(question["prompt"])
 
-with st.form(key=f"answer_form_{mode}_{question['id']}"):
+with st.form(key=f"answer_form_{st.session_state.active_db}_{question['id']}"):
     candidate_sql = st.text_area("Your SQL query", height=160, placeholder="SELECT ...")
     candidate_explanation = st.text_area(
         "Briefly explain your approach (optional, but the interviewer will ask anyway)",
@@ -135,18 +218,29 @@ if submitted:
             st.markdown("**Your result**")
             if result.error:
                 st.error(result.error)
+            elif not result.candidate_rows:
+                st.caption("Query returned 0 rows.")
             else:
-                st.dataframe([dict(zip(result.candidate_columns, row)) for row in result.candidate_rows])
+                st.dataframe(
+                    [dict(zip(result.candidate_columns, row)) for row in result.candidate_rows],
+                    width="stretch",
+                )
         with col2:
             st.markdown("**Expected result**")
-            st.dataframe([dict(zip(result.expected_columns, row)) for row in result.expected_rows])
+            if not result.expected_rows:
+                st.caption("Expected result has 0 rows.")
+            else:
+                st.dataframe(
+                    [dict(zip(result.expected_columns, row)) for row in result.expected_rows],
+                    width="stretch",
+                )
 
         if result.correct:
-            st.success("Correct! ✅")
+            st.success("Correct!")
         elif result.error:
             st.error("Your query errored — see message above.")
         else:
-            st.warning("Not quite — results don't match. ❌")
+            st.warning("Not quite - results don't match.")
 
         with st.spinner("Interviewer is reviewing your answer..."):
             feedback = interviewer_feedback(
@@ -163,12 +257,15 @@ if submitted:
 
 st.divider()
 idx = active_questions.index(question)
+is_last = idx == len(active_questions) - 1
 cols = st.columns(2)
 with cols[0]:
-    if idx > 0 and st.button("⬅ Previous question"):
+    if idx > 0 and st.button("Previous question"):
         st.session_state.current_q = active_questions[idx - 1]["id"]
         st.rerun()
 with cols[1]:
-    if idx < len(active_questions) - 1 and st.button("Next question ➡"):
+    if is_last:
+        st.button("Back to Home", on_click=go_home, key="home_at_end")
+    elif st.button("Next question ➡"):
         st.session_state.current_q = active_questions[idx + 1]["id"]
         st.rerun()
