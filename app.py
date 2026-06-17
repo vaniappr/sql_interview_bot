@@ -2,6 +2,8 @@
 either against a built-in banking + retail database, or against your own
 Kaggle dataset (CSV / zip of CSVs)."""
 
+import sqlite3
+
 import streamlit as st
 
 from dataset_loader import CUSTOM_DB_PATH, load_dataset
@@ -9,6 +11,29 @@ from dynamic_questions import generate_questions
 from grader import DEFAULT_DB_PATH, grade
 from llm import interviewer_feedback
 from questions import QUESTIONS as FINCOMMERCE_QUESTIONS
+
+
+def list_tables(db_path):
+    conn = sqlite3.connect(db_path)
+    try:
+        rows = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%' ORDER BY name"
+        ).fetchall()
+        return [r[0] for r in rows]
+    finally:
+        conn.close()
+
+
+def fetch_table(db_path, table_name, limit=100):
+    conn = sqlite3.connect(db_path)
+    try:
+        cur = conn.execute(f"SELECT * FROM {table_name} LIMIT ?", (limit,))
+        columns = [d[0] for d in cur.description]
+        rows = cur.fetchall()
+        return columns, rows
+    finally:
+        conn.close()
+
 
 if not DEFAULT_DB_PATH.exists():
     from db.build_db import build
@@ -110,6 +135,15 @@ st.caption(
     if mode == "FinCommerce (built-in)"
     else "Practicing against your uploaded dataset."
 )
+
+with st.expander("📋 Browse table data", expanded=False):
+    tables = list_tables(db_path)
+    chosen_table = st.selectbox("Table", tables, key=f"browse_table_{mode}")
+    if chosen_table:
+        columns, rows = fetch_table(db_path, chosen_table)
+        st.caption(f"Showing up to 100 rows of `{chosen_table}`")
+        st.dataframe([dict(zip(columns, row)) for row in rows], width="stretch")
+
 st.subheader(f"Question {question['id']} — {question['difficulty']} · {question['topic']}")
 st.write(question["prompt"])
 
@@ -135,11 +169,22 @@ if submitted:
             st.markdown("**Your result**")
             if result.error:
                 st.error(result.error)
+            elif not result.candidate_rows:
+                st.caption("Query returned 0 rows.")
             else:
-                st.dataframe([dict(zip(result.candidate_columns, row)) for row in result.candidate_rows])
+                st.dataframe(
+                    [dict(zip(result.candidate_columns, row)) for row in result.candidate_rows],
+                    width="stretch",
+                )
         with col2:
             st.markdown("**Expected result**")
-            st.dataframe([dict(zip(result.expected_columns, row)) for row in result.expected_rows])
+            if not result.expected_rows:
+                st.caption("Expected result has 0 rows.")
+            else:
+                st.dataframe(
+                    [dict(zip(result.expected_columns, row)) for row in result.expected_rows],
+                    width="stretch",
+                )
 
         if result.correct:
             st.success("Correct! ✅")
