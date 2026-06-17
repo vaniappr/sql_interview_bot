@@ -2,6 +2,7 @@
 either against a built-in banking + retail database, or against your own
 Kaggle dataset (CSV / zip of CSVs)."""
 
+import os
 import sqlite3
 
 import streamlit as st
@@ -59,8 +60,6 @@ st.set_page_config(page_title="SQL Interview Bot", layout="wide")
 
 if "score" not in st.session_state:
     st.session_state.score = {"correct": 0, "total": 0}
-if "history" not in st.session_state:
-    st.session_state.history = []
 if "custom_questions" not in st.session_state:
     st.session_state.custom_questions = None
 if "custom_schema" not in st.session_state:
@@ -106,9 +105,51 @@ if st.session_state.page == "home":
                 st.divider()
 
             with st.expander("Upload a new dataset (Kaggle CSV/zip)", expanded=not st.session_state.custom_questions):
+                has_key = bool(os.environ.get("GROQ_API_KEY") or os.environ.get("ANTHROPIC_API_KEY"))
+                if not has_key:
+                    st.warning(
+                        "Tailored, storyline-based question generation needs GROQ_API_KEY "
+                        "or ANTHROPIC_API_KEY set — add one to use this."
+                    )
+
                 uploaded = st.file_uploader(
                     "Upload CSV file(s) or a .zip of CSVs", type=["csv", "zip"], accept_multiple_files=True
                 )
+
+                st.caption("Tell us who you're prepping for, so the questions (and the storyline) match.")
+                p_cols = st.columns(2)
+                with p_cols[0]:
+                    role = st.selectbox(
+                        "Target role",
+                        ["Data Analyst", "Product Analyst", "Data Scientist", "Analytics Engineer", "Data Engineer"],
+                        key="profile_role",
+                    )
+                    industry = st.selectbox(
+                        "Target industry",
+                        ["Finance", "Retail", "Healthcare", "SaaS", "Logistics", "Other"],
+                        key="profile_industry",
+                    )
+                    dialect = st.selectbox(
+                        "SQL dialect",
+                        ["PostgreSQL", "MySQL", "SQL Server", "BigQuery", "Snowflake", "SQLite"],
+                        key="profile_dialect",
+                    )
+                with p_cols[1]:
+                    experience = st.selectbox(
+                        "Experience level", ["Entry", "Mid-level", "Senior"], key="profile_experience"
+                    )
+                    duration = st.selectbox(
+                        "Interview duration (minutes)", [15, 30, 45, 60], index=1, key="profile_duration"
+                    )
+                    skills = st.multiselect(
+                        "Skills to practice",
+                        ["Joins", "CTEs", "Window functions", "Retention", "Funnels", "Deduplication", "Optimization"],
+                        key="profile_skills",
+                    )
+                job_description = st.text_area(
+                    "Job description (optional)", height=80, key="profile_job_description"
+                )
+
                 st.caption("How many questions of each difficulty?")
                 diff_cols = st.columns(3)
                 with diff_cols[0]:
@@ -119,12 +160,24 @@ if st.session_state.page == "home":
                     n_hard = st.number_input("Hard", min_value=0, max_value=10, value=2, key="n_hard")
                 counts = {"Easy": n_easy, "Medium": n_medium, "Hard": n_hard}
 
-                if st.button("Load dataset & generate questions", disabled=not uploaded or not sum(counts.values())):
+                if st.button(
+                    "Load dataset & generate questions",
+                    disabled=not has_key or not uploaded or not sum(counts.values()),
+                ):
+                    profile = {
+                        "role": role,
+                        "experience": experience,
+                        "industry": industry,
+                        "dialect": dialect,
+                        "skills": skills,
+                        "duration": duration,
+                        "job_description": job_description.strip(),
+                    }
                     with st.spinner("Loading dataset into SQLite..."):
                         summaries = load_dataset(uploaded)
                         st.session_state.custom_schema = summaries
-                    with st.spinner("Generating interview questions for your schema..."):
-                        qs = generate_questions(summaries, counts=counts)
+                    with st.spinner("Generating your tailored interview storyline..."):
+                        qs = generate_questions(summaries, counts=counts, profile=profile)
                     if not qs:
                         st.error("Couldn't generate any valid questions from this dataset.")
                     else:
@@ -248,12 +301,6 @@ if submitted:
             )
         st.markdown("**Interviewer feedback**")
         st.info(feedback)
-
-        st.session_state.history.append({
-            "question_id": question["id"],
-            "sql": candidate_sql,
-            "correct": result.correct,
-        })
 
 st.divider()
 idx = active_questions.index(question)

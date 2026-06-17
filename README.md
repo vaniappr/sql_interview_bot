@@ -16,7 +16,7 @@ set against your actual schema.
 
 - Asks you SQL interview questions across Easy / Medium / Hard difficulty.
 - Runs your query for real, compares the result set against a reference
-  solution, and tells you if you're right.
+  solution, and tells you if you're right — not just "looks right."
 - Gives interviewer-style feedback on your query and your explanation
   (what's solid, what's inefficient, a follow-up question to think about).
 - Lets you browse the underlying tables so you're not guessing at the schema.
