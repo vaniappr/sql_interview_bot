@@ -1,4 +1,5 @@
 streamlit>=1.38
 Faker>=26.0
 anthropic>=0.40
+groq>=0.11
 pandas>=2.2
