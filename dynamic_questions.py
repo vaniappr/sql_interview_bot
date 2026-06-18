@@ -30,6 +30,24 @@ across two tables, a multi-column GROUP BY, or a derived/computed column \
 correlated or scalar subquery (e.g. "above the average"), a multi-table join \
 combined with aggregation, or a CTE chaining multiple steps.
 
+Across the question set as a whole, aim for broad topic coverage rather than \
+clustering on a few favorites. Topics to draw from: SELECT/filtering (WHERE, \
+IN, BETWEEN, LIKE, NULL checks), CASE statements, aggregations (COUNT, SUM, \
+AVG, MIN, MAX), GROUP BY with HAVING, joins (INNER/LEFT/RIGHT/FULL), window \
+functions (running totals, partitioned aggregates), date functions, string \
+functions, CTEs, data-cleaning patterns (COALESCE, NULLIF, dedup via \
+ROW_NUMBER), ranking functions (ROW_NUMBER, RANK, DENSE_RANK, NTILE), and \
+classic interview patterns such as top-N-per-group, running totals, and \
+next/previous-row comparisons (e.g. LAG/LEAD for retention-style questions). \
+Map each topic to whichever difficulty it naturally fits (e.g. a single \
+aggregate is Easy, a window function is Hard) — never bend a difficulty bar \
+just to force a topic in. If the dataset's schema genuinely can't support a \
+topic (e.g. there's no date/timestamp column, so date functions are out, or \
+no natural second table, so joins are out), skip that topic rather than \
+inventing an unanswerable or out-of-scope question; favor depth on the \
+topics the data does support over checking every box. With a small question \
+count, you won't fit every topic — prioritize variety over completeness.
+
 Tailor every question to the candidate's target industry: phrase questions \
 the way an interviewer at a company in that industry would phrase them, \
 using terminology and scenarios that feel native to that industry.
