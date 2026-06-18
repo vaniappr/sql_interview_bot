@@ -1,4 +1,4 @@
-# SQL Interview Bot
+# SQL Practice Buddy
 
 I built this to practice SQL the way you'd actually get interviewed on it —
 not flashcards, but real queries against a real-ish database, with feedback
@@ -16,7 +16,7 @@ set against your actual schema.
 
 - Asks you SQL interview questions across Easy / Medium / Hard difficulty.
 - Runs your query for real, compares the result set against a reference
-  solution, and tells you if you're right.
+  solution, and tells you if you're right — not just "looks right."
 - Gives interviewer-style feedback on your query and your explanation
   (what's solid, what's inefficient, a follow-up question to think about).
 - Lets you browse the underlying tables so you're not guessing at the schema.
@@ -37,8 +37,9 @@ runs, no manual setup script needed.
 
 By default the app still works fully offline (queries are graded for real,
 feedback is just template text). Add an API key if you want actual
-conversational feedback, and to have your uploaded-dataset questions written
-by an LLM instead of the built-in templates:
+conversational feedback. The same key is also required to generate questions
+for an uploaded dataset, since that needs an LLM to write a tailored
+storyline:
 
 - `GROQ_API_KEY` — free, no credit card required. Grab one at
   https://console.groq.com/keys. Used first if set.
@@ -51,15 +52,12 @@ In the app, open **"Upload a new dataset"** and upload:
 - one or more `.csv` files, or
 - a `.zip` of CSVs (e.g. a straight Kaggle download)
 
-Pick how many Easy/Medium/Hard questions you want, then click **Load dataset
-& generate questions**. Each CSV becomes a table, and:
-
-- with an API key set, an LLM writes questions + reference SQL straight from
-  your schema and sample rows — every solution is executed and validated
-  before being shown, so anything broken just gets dropped silently;
-- without a key, a built-in template generator covers the same ground
-  (counts, group-bys, aggregates, derived columns, window functions,
-  correlated subqueries) with no LLM required.
+Pick a target industry and how many Easy/Medium/Hard questions you want,
+then click **Load dataset & generate questions**. Each CSV becomes a table,
+and an LLM writes the whole question set as one coherent storyline (e.g.
+"you've just joined the analytics team at a retail company...") tailored to
+that industry — every reference solution is executed and validated before
+being shown, so anything broken just gets dropped silently.
 
 From there it's the same flow as the built-in database: write SQL, get
 graded, get feedback.
@@ -72,8 +70,8 @@ graded, get feedback.
   solution.
 - `dataset_loader.py` — loads uploaded CSV/zip files into a SQLite database
   and summarizes each table's columns/types/sample rows.
-- `dynamic_questions.py` — builds (and validates) a question set for a
-  custom dataset, via LLM or the offline template fallback.
+- `dynamic_questions.py` — builds (and validates) a storyline-driven
+  question set for a custom dataset, via LLM.
 - `grader.py` — runs your query and the reference query against the same
   database and compares the results.
 - `llm.py` — turns your query, your explanation, and the correctness check
