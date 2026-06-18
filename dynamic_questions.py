@@ -1,11 +1,10 @@
 """Generates interview questions for a user-uploaded dataset.
 
-Tailoring (target role, experience level, industry, SQL dialect, skills to
-practice, interview duration, optional job description) and the storyline
-that ties the question set together both require an LLM, so this needs
-GROQ_API_KEY (free tier) or ANTHROPIC_API_KEY to be set. Every generated
-solution is executed against the real dataset and validated before being
-shown (broken questions are silently dropped).
+Tailoring to the target industry, and the storyline that ties the question
+set together, both require an LLM, so this needs GROQ_API_KEY (free tier) or
+ANTHROPIC_API_KEY to be set. Every generated solution is executed against
+the real dataset and validated before being shown (broken questions are
+silently dropped).
 """
 
 import json
@@ -31,22 +30,18 @@ across two tables, a multi-column GROUP BY, or a derived/computed column \
 correlated or scalar subquery (e.g. "above the average"), a multi-table join \
 combined with aggregation, or a CTE chaining multiple steps.
 
-Tailor every question to the candidate's target role, experience level, \
-target industry, and the SQL skills they asked to practice (favor those \
-skills/topics when picking what each question tests, while still respecting \
-the difficulty bars above). Phrase questions the way an interviewer in that \
-industry, hiring for that role/level, would phrase them, and reference the \
-SQL dialect they're targeting in the wording when natural (e.g. "window \
-function" vs. a dialect-specific function name), even though the underlying \
-solution must still be plain SQLite.
+Tailor every question to the candidate's target industry: phrase questions \
+the way an interviewer at a company in that industry would phrase them, \
+using terminology and scenarios that feel native to that industry.
 
 Critically, the whole set must read as ONE coherent storyline, not a random \
-grab-bag: invent a short scenario (e.g. "you've just joined as a {role} at a \
-{industry} company and your first task is...") and have each question build \
-on that same scenario and dataset context, roughly in a logical order an \
-interviewer would walk through (start broad/exploratory, then narrow in, \
-then dig into edge cases or efficiency). Reference the shared scenario in \
-each prompt's wording so it doesn't feel like disconnected questions.
+grab-bag: invent a short scenario (e.g. "you've just joined the analytics \
+team at a {industry} company and your first task is...") and have each \
+question build on that same scenario and dataset context, roughly in a \
+logical order an interviewer would walk through (start broad/exploratory, \
+then narrow in, then dig into edge cases or efficiency). Reference the \
+shared scenario in each prompt's wording so it doesn't feel like \
+disconnected questions.
 
 Respond with ONLY a JSON array, no prose, no markdown fences. Each element: \
 {"difficulty": "Easy|Medium|Hard", "topic": "...", "prompt": "...", \
@@ -63,17 +58,7 @@ def _schema_text(summaries: list[TableSummary]) -> str:
 
 
 def _profile_text(profile: dict) -> str:
-    lines = [
-        f"Target role: {profile.get('role')}",
-        f"Experience level: {profile.get('experience')}",
-        f"Target industry: {profile.get('industry')}",
-        f"SQL dialect (for wording only, solutions must stay SQLite): {profile.get('dialect')}",
-        f"Skills to practice: {', '.join(profile.get('skills', [])) or 'no specific preference'}",
-        f"Interview duration: {profile.get('duration')} minutes",
-    ]
-    if profile.get("job_description"):
-        lines.append(f"Job description (for extra context on what to emphasize):\n{profile['job_description']}")
-    return "\n".join(lines)
+    return f"Target industry: {profile.get('industry')}"
 
 
 def _llm_generate(summaries: list[TableSummary], counts: dict, profile: dict):
@@ -121,9 +106,7 @@ def generate_questions(summaries: list[TableSummary], counts: dict, profile: dic
     `counts` maps difficulty -> desired number of questions, e.g.
     {"Easy": 3, "Medium": 3, "Hard": 2}.
 
-    `profile` carries the candidate-facing tailoring fields: role,
-    experience, industry, dialect, skills (list), duration, and optionally
-    job_description.
+    `profile` carries the candidate-facing tailoring field: industry.
 
     Requires GROQ_API_KEY or ANTHROPIC_API_KEY to be set — personalization
     and the storyline both need an LLM, there is no offline fallback.

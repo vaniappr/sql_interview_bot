@@ -1,4 +1,4 @@
-"""SQL Interview Bot — an InterviewMaster-style chatbot for practicing SQL,
+"""SQL Practice Buddy — an InterviewMaster-style chatbot for practicing SQL,
 either against a built-in banking + retail database, or against your own
 Kaggle dataset (CSV / zip of CSVs)."""
 
@@ -56,7 +56,7 @@ if not DEFAULT_DB_PATH.exists():
     from db.build_db import build
     build()
 
-st.set_page_config(page_title="SQL Interview Bot", layout="wide")
+st.set_page_config(page_title="SQL Practice Buddy", layout="wide")
 
 if "score" not in st.session_state:
     st.session_state.score = {"correct": 0, "total": 0}
@@ -74,7 +74,7 @@ if "page" not in st.session_state:
 
 # ---------------------------------------------------------------- Home page
 if st.session_state.page == "home":
-    st.title("SQL Interview Bot")
+    st.title("SQL Practice Buddy")
     st.write("Choose a database to start your interview:")
 
     col1, col2 = st.columns(2)
@@ -116,38 +116,11 @@ if st.session_state.page == "home":
                     "Upload CSV file(s) or a .zip of CSVs", type=["csv", "zip"], accept_multiple_files=True
                 )
 
-                st.caption("Tell us who you're prepping for, so the questions (and the storyline) match.")
-                p_cols = st.columns(2)
-                with p_cols[0]:
-                    role = st.selectbox(
-                        "Target role",
-                        ["Data Analyst", "Product Analyst", "Data Scientist", "Analytics Engineer", "Data Engineer"],
-                        key="profile_role",
-                    )
-                    industry = st.selectbox(
-                        "Target industry",
-                        ["Finance", "Retail", "Healthcare", "SaaS", "Logistics", "Other"],
-                        key="profile_industry",
-                    )
-                    dialect = st.selectbox(
-                        "SQL dialect",
-                        ["PostgreSQL", "MySQL", "SQL Server", "BigQuery", "Snowflake", "SQLite"],
-                        key="profile_dialect",
-                    )
-                with p_cols[1]:
-                    experience = st.selectbox(
-                        "Experience level", ["Entry", "Mid-level", "Senior"], key="profile_experience"
-                    )
-                    duration = st.selectbox(
-                        "Interview duration (minutes)", [15, 30, 45, 60], index=1, key="profile_duration"
-                    )
-                    skills = st.multiselect(
-                        "Skills to practice",
-                        ["Joins", "CTEs", "Window functions", "Retention", "Funnels", "Deduplication", "Optimization"],
-                        key="profile_skills",
-                    )
-                job_description = st.text_area(
-                    "Job description (optional)", height=80, key="profile_job_description"
+                st.caption("Tell us the industry, so the storyline fits.")
+                industry = st.selectbox(
+                    "Target industry",
+                    ["Finance", "Retail", "Healthcare", "SaaS", "Logistics", "Other"],
+                    key="profile_industry",
                 )
 
                 st.caption("How many questions of each difficulty?")
@@ -164,15 +137,7 @@ if st.session_state.page == "home":
                     "Load dataset & generate questions",
                     disabled=not has_key or not uploaded or not sum(counts.values()),
                 ):
-                    profile = {
-                        "role": role,
-                        "experience": experience,
-                        "industry": industry,
-                        "dialect": dialect,
-                        "skills": skills,
-                        "duration": duration,
-                        "job_description": job_description.strip(),
-                    }
+                    profile = {"industry": industry}
                     with st.spinner("Loading dataset into SQLite..."):
                         summaries = load_dataset(uploaded)
                         st.session_state.custom_schema = summaries
@@ -202,7 +167,7 @@ if not active_questions:
     go_home()
     st.rerun()
 
-st.title("SQL Interview Bot")
+st.title("SQL Practice Buddy")
 st.button("Home", on_click=go_home)
 
 with st.sidebar:
@@ -262,9 +227,13 @@ if submitted:
         st.warning("Write a query before submitting.")
     else:
         result = grade(candidate_sql, question["solution"], question["ordered"], db_path=db_path)
-        st.session_state.score["total"] += 1
-        if result.correct:
-            st.session_state.score["correct"] += 1
+
+        submission_sig = (st.session_state.active_db, question["id"], candidate_sql)
+        if st.session_state.get("last_scored_sig") != submission_sig:
+            st.session_state.score["total"] += 1
+            if result.correct:
+                st.session_state.score["correct"] += 1
+            st.session_state.last_scored_sig = submission_sig
 
         col1, col2 = st.columns(2)
         with col1:
