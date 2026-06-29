@@ -58,6 +58,55 @@ if not DEFAULT_DB_PATH.exists():
 
 st.set_page_config(page_title="SQL Practice Buddy", layout="wide")
 
+st.markdown(
+    """
+    <style>
+    .block-container { padding-top: 2.5rem; max-width: 1100px; }
+
+    h1 { font-weight: 700; letter-spacing: -0.02em; }
+    h2, h3 { font-weight: 600; }
+
+    [data-testid="stVerticalBlockBorderWrapper"] {
+        border-radius: 14px !important;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        transition: box-shadow 0.15s ease;
+    }
+    [data-testid="stVerticalBlockBorderWrapper"]:hover {
+        box-shadow: 0 4px 14px rgba(0,0,0,0.08);
+    }
+
+    div[data-testid="stForm"] {
+        border: 1px solid #E5E7E5;
+        border-radius: 14px;
+        padding: 1.5rem 1.5rem 0.5rem;
+        background-color: #FAFBFA;
+    }
+
+    .stButton > button, .stFormSubmitButton > button {
+        border-radius: 8px;
+        font-weight: 600;
+        padding: 0.5rem 1.2rem;
+    }
+    .stButton > button[kind="primary"], .stFormSubmitButton > button[kind="primary"] {
+        background-color: #2D6A4F;
+        border-color: #2D6A4F;
+    }
+
+    [data-testid="stMetricValue"] { color: #2D6A4F; font-weight: 700; }
+
+    [data-testid="stExpander"] {
+        border-radius: 10px;
+        border: 1px solid #E5E7E5;
+    }
+
+    section[data-testid="stSidebar"] {
+        background-color: #F4F6F5;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
 if "score" not in st.session_state:
     st.session_state.score = {"correct": 0, "total": 0}
 if "custom_questions" not in st.session_state:
@@ -87,7 +136,7 @@ if st.session_state.page == "home":
                 "transactions, loans, cards, products, orders."
             )
             st.markdown(f"**{len(FINCOMMERCE_QUESTIONS)} questions** ready to go.")
-            if st.button("Start interview ▶", key="start_fincommerce"):
+            if st.button("Start interview ▶", key="start_fincommerce", type="primary"):
                 start_interview(FINCOMMERCE)
                 st.rerun()
 
@@ -99,7 +148,7 @@ if st.session_state.page == "home":
                 for t in st.session_state.custom_schema:
                     st.markdown(f"- **{t.name}** ({t.row_count} rows)")
                 st.markdown(f"**{len(st.session_state.custom_questions)} questions** ready to go.")
-                if st.button("Start interview ▶", key="start_custom"):
+                if st.button("Start interview ▶", key="start_custom", type="primary"):
                     start_interview(CUSTOM)
                     st.rerun()
                 st.divider()
@@ -220,7 +269,7 @@ with st.form(key=f"answer_form_{st.session_state.active_db}_{question['id']}"):
         "Briefly explain your approach (optional, but the interviewer will ask anyway)",
         height=80,
     )
-    submitted = st.form_submit_button("Submit answer")
+    submitted = st.form_submit_button("Submit answer", type="primary")
 
 if submitted:
     if not candidate_sql.strip():
